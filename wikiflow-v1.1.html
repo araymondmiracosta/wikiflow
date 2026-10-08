@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>WikiFlow</title>
+    
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z'/%3E%3Cpath d='M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z'/%3E%3C/svg%3E">
+    
+    <style>
+        /* Base Themes & Reset */
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+
+        body, html {
+            margin: 0; padding: 0; background-color: #000; color: #fff;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            overflow: hidden; overscroll-behavior-y: none; transition: background-color 0.3s, color 0.3s;
+        }
+
+        /* Light Theme Overrides */
+        body.light-theme { background-color: #f3f4f6; color: #111827; }
+
+        #reels-container {
+            height: 100vh; height: 100dvh; width: 100vw;
+            overflow-y: scroll; scroll-snap-type: y mandatory; scroll-behavior: smooth;
+            -ms-overflow-style: none; scrollbar-width: none; position: relative;
+        }
+        #reels-container::-webkit-scrollbar { display: none; }
+
+        /* App Branding Header */
+        #app-header {
+            position: fixed; top: 20px; left: 20px; z-index: 9999;
+            display: flex; align-items: center; gap: 10px;
+            font-size: 1.25rem; font-weight: 800; font-family: Georgia, serif;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.8); pointer-events: none; transition: 0.3s;
+        }
+        body.light-theme #app-header { text-shadow: 0 2px 8px rgba(255,255,255,0.8); color: #111827; }
+        
+        .app-logo {
+            width: 28px; height: 28px; color: #3b82f6;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+        }
+
+        .reel {
+            height: 100vh; height: 100dvh; width: 100vw;
+            scroll-snap-align: start; scroll-snap-stop: always; position: relative;
+            display: flex; flex-direction: column; justify-content: flex-end; align-items: center;
+        }
+
+        /* Dynamic Backgrounds via CSS Variables */
+        .reel-bg {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(180deg, hsl(var(--reel-h, 0), var(--reel-s, 0%), 15%) 0%, hsl(var(--reel-h, 0), var(--reel-s, 0%), 5%) 100%);
+            z-index: 1; transition: background 0.8s ease-in-out;
+        }
+        body.light-theme .reel-bg {
+            background: linear-gradient(180deg, hsl(var(--reel-h, 0), var(--reel-s, 0%), 90%) 0%, hsl(var(--reel-h, 0), var(--reel-s, 0%), 98%) 100%);
+        }
+
+        .reel-content {
+            position: relative; z-index: 10; padding: 24px 8vw 60px 8vw; /* 8vw padding prevents edge crowding on mobile */
+            width: 100%; max-width: 800px; text-align: center;
+            display: flex; flex-direction: column; align-items: center;
+        }
+
+        .title-font { font-family: Georgia, "Times New Roman", serif; }
+        
+        .text-shadow { text-shadow: 0px 2px 6px rgba(0,0,0,0.9); transition: 0.3s; }
+        body.light-theme .text-shadow { text-shadow: 0px 2px 6px rgba(255,255,255,0.9); }
+
+        .article-title { font-size: 1.75rem; font-weight: bold; margin-bottom: 1rem; line-height: 1.25; color: #fff; transition: 0.3s; }
+        body.light-theme .article-title { color: #111827; }
+
+        .article-extract { font-size: 0.95rem; margin-bottom: 2rem; color: #e5e7eb; max-width: 36rem; line-height: 1.625; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; transition: 0.3s; }
+        body.light-theme .article-extract { color: #374151; }
+
+        .article-img { border: 4px solid rgba(255,255,255,0.9); border-radius: 0.75rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); margin-bottom: 1.5rem; max-height: 35vh; width: auto; max-width: 100%; object-fit: cover; background: #111827; }
+        body.light-theme .article-img { border-color: rgba(0,0,0,0.1); background: #f3f4f6; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.15); }
+        body.hide-images .article-img { display: none !important; }
+
+        .read-btn { background: #fff; color: #000; padding: 0.875rem 2rem; border-radius: 9999px; font-weight: bold; border: none; cursor: pointer; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); transition: transform 0.1s, background 0.3s, color 0.3s; font-size: 1.05rem; }
+        body.light-theme .read-btn { background: #111827; color: #fff; }
+        .read-btn:active { transform: scale(0.95); }
+
+        #scroll-trigger { height: 2px; width: 100%; background: transparent; }
+        
+        #loading-overlay {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999;
+            background: rgba(0,0,0,0.6); padding: 8px 16px; border-radius: 20px; font-size: 12px; display: none; backdrop-filter: blur(4px); pointer-events: none; color: white;
+        }
+
+        /* Mobile Friendly UI / Toggles */
+        #menu-toggle {
+            position: fixed; top: 20px; right: 20px; z-index: 9999; background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.2); color: white; padding: 10px 18px; border-radius: 9999px;
+            font-size: 14px; font-weight: bold; cursor: pointer; backdrop-filter: blur(10px); box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: 0.3s;
+        }
+        body.light-theme #menu-toggle { background: rgba(255,255,255,0.8); color: #111827; border-color: rgba(0,0,0,0.15); }
+
+        #settings-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 9999; backdrop-filter: blur(5px); }
+        #settings-modal {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85vw; max-width: 340px;
+            background: rgba(15,23,42,0.95); border: 1px solid rgba(255,255,255,0.15); padding: 24px; border-radius: 20px;
+            display: flex; flex-direction: column; gap: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); transition: 0.3s;
+        }
+        body.light-theme #settings-modal { background: rgba(255,255,255,0.95); border-color: rgba(0,0,0,0.1); color: #111827; }
+        
+        .modal-header { display: flex; justify-content: space-between; align-items: center; font-size: 1.25rem; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px; transition: 0.3s; }
+        body.light-theme .modal-header { border-color: rgba(0,0,0,0.1); }
+        
+        .close-btn { background: none; border: none; color: #9ca3af; font-size: 1.5rem; cursor: pointer; padding: 0; line-height: 1; transition: 0.3s; }
+        body.light-theme .close-btn { color: #6b7280; }
+        .setting-row { display: flex; justify-content: space-between; align-items: center; font-size: 1.05rem; font-weight: 500; }
+
+        .switch { position: relative; display: inline-block; width: 50px; height: 28px; flex-shrink: 0; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #4b5563; transition: .3s; border-radius: 34px; }
+        .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 4px; bottom: 4px; background-color: white; transition: .3s; border-radius: 50%; }
+        input:checked + .slider { background-color: #3b82f6; }
+        input:checked + .slider:before { transform: translateX(22px); }
+
+        .modal-divider { border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 0; transition: 0.3s; }
+        body.light-theme .modal-divider { border-color: rgba(0,0,0,0.1); }
+        
+        .about-text { text-align: center; font-size: 0.85rem; color: #9ca3af; line-height: 1.4; transition: 0.3s; }
+        body.light-theme .about-text { color: #6b7280; }
+
+        /* Debug Panel */
+        #debug-panel {
+            position: fixed; top: 75px; right: 20px; z-index: 9998;
+            background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(255, 255, 255, 0.2); padding: 16px; border-radius: 12px;
+            width: 260px; max-width: calc(100vw - 40px); backdrop-filter: blur(10px); display: none; box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            flex-direction: column; transition: 0.3s;
+        }
+        body.light-theme #debug-panel { background: rgba(255,255,255,0.95); border-color: rgba(0,0,0,0.1); color: #111827; }
+        
+        #debug-panel h3 { font-weight: bold; margin-top: 0; margin-bottom: 8px; border-bottom: 1px solid #444; padding-bottom: 4px; font-size: 13px; transition: 0.3s; }
+        body.light-theme #debug-panel h3 { border-color: rgba(0,0,0,0.1); }
+        
+        .stat-list-container { max-height: 30vh; overflow-y: auto; margin-bottom: 12px; padding-right: 5px; }
+        .stat-list-container::-webkit-scrollbar { width: 4px; }
+        .stat-list-container::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); border-radius: 4px; }
+        .stat-list-container::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+        body.light-theme .stat-list-container::-webkit-scrollbar-track { background: rgba(0,0,0,0.05); }
+        body.light-theme .stat-list-container::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.2); }
+
+        .stat-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 2px; font-size: 12px; transition: 0.3s; }
+        body.light-theme .stat-row { border-color: rgba(0,0,0,0.1); }
+        
+        .stat-name-container { display: flex; align-items: center; gap: 6px; overflow: hidden; flex: 1; padding-right: 8px; }
+        .delete-btn { background: none; border: none; color: #ef4444; cursor: pointer; font-size: 14px; padding: 0 4px; line-height: 1; opacity: 0.6; transition: 0.2s; border-radius: 4px; }
+        .delete-btn:hover { background: rgba(239, 68, 68, 0.2); opacity: 1; }
+        
+        .truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .text-green { color: #4ade80; font-weight: bold; }
+        body.light-theme .text-green { color: #16a34a; }
+        .text-red { color: #ef4444; font-weight: bold; }
+        body.light-theme .text-red { color: #dc2626; }
+        .cold-start-banner { font-size: 10px; color: #9ca3af; margin-bottom: 8px; font-style: italic; transition: 0.3s; }
+        body.light-theme .cold-start-banner { color: #6b7280; }
+
+        #clear-stats-btn { width: 100%; padding: 8px; background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #ef4444; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; font-size: 12px; }
+        #clear-stats-btn:hover { background: #ef4444; color: white; }
+
+        .reason-box { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.2); font-size: 12px; line-height: 1.4; transition: 0.3s; }
+        body.light-theme .reason-box { border-color: rgba(0,0,0,0.1); }
+        .reason-title { font-weight: bold; color: #fff; margin-bottom: 4px; transition: 0.3s; }
+        body.light-theme .reason-title { color: #111827; }
+        .reason-text { color: #9ca3af; font-style: italic; transition: 0.3s; }
+        body.light-theme .reason-text { color: #4b5563; }
+
+        /* Mobile specific adjustments */
+        @media (min-width: 768px) {
+            .article-title { font-size: 3rem; }
+            .article-extract { font-size: 1.125rem; }
+            .article-img { max-height: 250px; }
+            .reel-content { padding-left: 24px; padding-right: 24px; }
+        }
+
+        @media (max-width: 768px) {
+            /* Restrict Stats Box Size so it never overlaps main reading content */
+            #debug-panel {
+                top: 70px;
+                right: 15px;
+                width: calc(100vw - 30px);
+                max-width: 280px;
+                max-height: 35vh; /* Keep it constrained to upper right chunk */
+                font-size: 11px;
+                padding: 12px;
+            }
+            .stat-list-container {
+                max-height: 12vh;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- App Branding -->
+    <div id="app-header">
+        <svg viewBox="0 0 24 24" class="app-logo" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+            <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+        </svg>
+        WikiFlow
+    </div>
+
+    <div id="loading-overlay">Loading...</div>
+
+    <!-- Mobile Menu Button -->
+    <button id="menu-toggle">⚙️ Menu</button>
+    
+    <!-- Settings Modal -->
+    <div id="settings-overlay">
+        <div id="settings-modal">
+            <div class="modal-header">
+                Settings
+                <button class="close-btn" id="close-modal">&times;</button>
+            </div>
+            
+            <div class="setting-row">
+                <span>Show Algorithm Stats</span>
+                <label class="switch">
+                    <input type="checkbox" id="toggle-stats">
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <div class="setting-row">
+                <span>Light Theme</span>
+                <label class="switch">
+                    <input type="checkbox" id="toggle-theme">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            
+            <div class="setting-row">
+                <span>Hide Pictures</span>
+                <label class="switch">
+                    <input type="checkbox" id="toggle-images">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            
+            <hr class="modal-divider">
+            <div class="about-text">
+                <strong>WikiFlow</strong><br>Version 1.0<br>
+                Curated endless learning.
+            </div>
+        </div>
+    </div>
+
+    <!-- Debug Stats Panel with Reason Extension -->
+    <div id="debug-panel" style="display: none;">
+        <div id="stats-content"></div>
+        <div class="reason-box">
+            <div class="reason-title">Why this article?</div>
+            <div class="reason-text" id="suggestion-reason-text">Awaiting scroll...</div>
+        </div>
+    </div>
+
+    <div id="reels-container">
+        <div id="scroll-trigger"></div>
+    </div>
+
+    <script>
+        const API_URL = 'https://en.wikipedia.org/w/api.php';
+        const container = document.getElementById('reels-container');
+        const trigger = document.getElementById('scroll-trigger');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        
+        const menuToggle = document.getElementById('menu-toggle');
+        const settingsOverlay = document.getElementById('settings-overlay');
+        const closeModalBtn = document.getElementById('close-modal');
+        const debugPanel = document.getElementById('debug-panel');
+        const statsContent = document.getElementById('stats-content');
+        const suggestionReasonText = document.getElementById('suggestion-reason-text');
+        
+        const toggleStatsToggle = document.getElementById('toggle-stats');
+        const toggleImagesToggle = document.getElementById('toggle-images');
+        const toggleThemeToggle = document.getElementById('toggle-theme');
+        
+        let isLoading = false;
+        let dwellInterval = null;
+        let activeCategories = [];
+        let activeDwellTime = 0;
+        
+        let seenArticles = new Set(JSON.parse(localStorage.getItem('wikiReelsSeen') || '[]'));
+        
+        const ignoredCategories = /article|page|wikipedia|stub|cs1|dmy date|mdy date|infobox|navbox|wikidata|all|use|accuracy|dispute|webarchive|template|short description|births|deaths|alumni|establishments|century/i;
+
+        let scrollObserver;
+        let dwellObserver;
+
+        // --- Color Extraction Logic ---
+        function rgbToHsl(r, g, b) {
+            r /= 255; g /= 255; b /= 255;
+            const max = Math.max(r, g, b), min = Math.min(r, g, b);
+            let h, s, l = (max + min) / 2;
+            if (max == min) { h = s = 0; } 
+            else {
+                const d = max - min;
+                s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+                switch (max) {
+                    case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+                    case g: h = (b - r) / d + 2; break;
+                    case b: h = (r - g) / d + 4; break;
+                }
+                h /= 6;
+            }
+            return [Math.floor(h * 360), Math.floor(s * 100), Math.floor(l * 100)];
+        }
+
+        function extractColorFromImage(url, callback) {
+            const img = new Image();
+            img.crossOrigin = "Anonymous"; 
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = img.naturalWidth || img.width || 100; 
+                canvas.height = img.naturalHeight || img.height || 100;
+                if(canvas.width === 0) return;
+                
+                try {
+                    ctx.drawImage(img, 0, 0);
+                    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+                    let r = 0, g = 0, b = 0, count = 0;
+                    
+                    for (let i = 0; i < data.length; i += 16) {
+                        if (data[i+3] > 128) { 
+                            r += data[i]; g += data[i+1]; b += data[i+2];
+                            count++;
+                        }
+                    }
+                    if (count > 0) {
+                        const hsl = rgbToHsl(r/count, g/count, b/count);
+                        callback(hsl);
+                    }
+                } catch(e) { }
+            };
+            img.src = url;
+        }
+
+        // --- Persistent Settings Logic ---
+        function loadSettings() {
+            const settings = JSON.parse(localStorage.getItem('wikiReelsSettings') || '{"showStats":false, "hideImages":false, "lightTheme":false}');
+            toggleStatsToggle.checked = settings.showStats;
+            toggleImagesToggle.checked = settings.hideImages;
+            toggleThemeToggle.checked = settings.lightTheme;
+            
+            if (settings.showStats) {
+                debugPanel.style.display = 'flex';
+                renderDebug();
+            }
+            if (settings.hideImages) {
+                document.body.classList.add('hide-images');
+            }
+            if (settings.lightTheme) {
+                document.body.classList.add('light-theme');
+            }
+        }
+        
+        function saveSettings() {
+            const settings = {
+                showStats: toggleStatsToggle.checked,
+                hideImages: toggleImagesToggle.checked,
+                lightTheme: toggleThemeToggle.checked
+            };
+            localStorage.setItem('wikiReelsSettings', JSON.stringify(settings));
+        }
+
+        function toggleMenu() {
+            const isHidden = window.getComputedStyle(settingsOverlay).display === 'none';
+            settingsOverlay.style.display = isHidden ? 'block' : 'none';
+        }
+        
+        menuToggle.addEventListener('click', toggleMenu);
+        closeModalBtn.addEventListener('click', toggleMenu);
+        settingsOverlay.addEventListener('click', (e) => {
+            if (e.target === settingsOverlay) toggleMenu();
+        });
+
+        toggleStatsToggle.addEventListener('change', (e) => {
+            debugPanel.style.display = e.target.checked ? 'flex' : 'none';
+            if (e.target.checked) renderDebug();
+            saveSettings();
+        });
+
+        toggleThemeToggle.addEventListener('change', (e) => {
+            document.body.classList.toggle('light-theme', e.target.checked);
+            saveSettings();
+        });
+
+        toggleImagesToggle.addEventListener('change', (e) => {
+            document.body.classList.toggle('hide-images', e.target.checked);
+            saveSettings();
+        });
+
+        window.removeInterest = function(encodedCat) {
+            try {
+                const cat = decodeURIComponent(encodedCat);
+                const profile = getProfile();
+                delete profile[cat];
+                saveProfile(profile);
+                renderDebug();
+            } catch(e) {}
+        };
+
+        function renderDebug() {
+            const profile = getProfile();
+            const sorted = Object.entries(profile).sort((a, b) => b[1] - a[1]);
+            
+            let html = '<h3>Algorithm Stats</h3>';
+            
+            if (isColdStart(profile)) {
+                html += '<div class="cold-start-banner">Initializing Phase: Exploring broad topics...</div>';
+            }
+            
+            html += '<div class="stat-list-container">';
+            if (sorted.length === 0) {
+                html += '<p style="color: #9ca3af;">Read or dwell on articles to build interest stats.</p>';
+            } else {
+                sorted.forEach(([cat, score]) => {
+                    const colorClass = score > 0 ? 'text-green' : 'text-red';
+                    const encodedCat = encodeURIComponent(cat);
+                    html += `<div class="stat-row">
+                                <div class="stat-name-container">
+                                    <button class="delete-btn" onclick="removeInterest('${encodedCat}')" title="Delete interest">×</button>
+                                    <span class="truncate" title="${cat}">${cat}</span>
+                                </div>
+                                <span class="${colorClass}">${Math.round(score)}</span>
+                             </div>`;
+                });
+            }
+            html += '</div>';
+            html += `<button id="clear-stats-btn">Clear All Interests</button>`;
+            
+            statsContent.innerHTML = html;
+
+            document.getElementById('clear-stats-btn')?.addEventListener('click', () => {
+                localStorage.removeItem('wikiReelsProfile');
+                renderDebug();
+            });
+        }
+
+        function getProfile() {
+            try { return JSON.parse(localStorage.getItem('wikiReelsProfile')) || {}; } 
+            catch { return {}; }
+        }
+
+        function saveProfile(profile) {
+            try { localStorage.setItem('wikiReelsProfile', JSON.stringify(profile)); } 
+            catch(e) {}
+        }
+
+        function isColdStart(profile = null) {
+            if (!profile) profile = getProfile();
+            const totalScore = Object.values(profile).reduce((sum, val) => sum + Math.max(0, val), 0);
+            return totalScore < 150; 
+        }
+
+        function updateCategoryScores(categories, points) {
+            if (!categories || categories.length === 0) return;
+            const profile = getProfile();
+            
+            categories.forEach(cat => {
+                const cleanCat = cat.replace('Category:', '').trim();
+                if (!ignoredCategories.test(cleanCat)) {
+                    profile[cleanCat] = (profile[cleanCat] || 0) + points;
+                    if (profile[cleanCat] > 500) profile[cleanCat] = 500;
+                }
+            });
+            
+            for (let cat in profile) {
+                profile[cat] *= 0.99; 
+                if (profile[cat] < -50 || (profile[cat] > 0 && profile[cat] < 0.5)) {
+                    delete profile[cat];
+                }
+            }
+
+            const sortedKeys = Object.entries(profile).sort((a, b) => b[1] - a[1]);
+            if (sortedKeys.length > 30) {
+                sortedKeys.slice(30).forEach(([cat]) => delete profile[cat]);
+            }
+            
+            saveProfile(profile);
+            
+            if (toggleStatsToggle.checked) {
+                renderDebug();
+            }
+        }
+
+        function markArticleSeen(pageid) {
+            seenArticles.add(pageid);
+            if (seenArticles.size > 50000) { 
+                seenArticles = new Set(Array.from(seenArticles).slice(-25000));
+            }
+            try { localStorage.setItem('wikiReelsSeen', JSON.stringify(Array.from(seenArticles))); } catch(e) {}
+        }
+
+        function getTopCategory() {
+            const profile = getProfile();
+            const sorted = Object.entries(profile).filter(a => a[1] > 0).sort((a, b) => b[1] - a[1]);
+            
+            if (sorted.length > 0) {
+                const maxIndex = Math.min(15, sorted.length) - 1; 
+                return sorted[Math.floor(Math.random() * (maxIndex + 1))][0];
+            }
+            return null;
+        }
+
+        function scoreArticleByIntersection(article, profile, baseReason) {
+            let score = 0;
+            const rawCats = article.categories ? article.categories.map(c => c.title) : [];
+            const cleanCats = rawCats.map(c => c.replace('Category:', '').trim()).filter(c => !ignoredCategories.test(c));
+            
+            let matchedInterests = [];
+            cleanCats.forEach(cat => {
+                if (profile[cat]) {
+                    const impact = profile[cat] > 0 ? Math.log(profile[cat] + 1) * 10 : profile[cat];
+                    score += impact;
+                    matchedInterests.push(cat);
+                }
+            });
+
+            if (matchedInterests.length > 1) score = score * (matchedInterests.length * 1.5);
+            if (article.thumbnail) score += 200; 
+
+            let reason = baseReason;
+            if (matchedInterests.length > 0 && score > 200) {
+                const topMatches = matchedInterests.slice(0, 2).join(', ');
+                reason = `Matched your interest in: <b>${topMatches}</b>`;
+            }
+
+            return { article, score, cleanCats, reason };
+        }
+
+        async function fetchWikiData(params) {
+            params.append('origin', '*'); params.append('format', 'json');
+            params.append('prop', 'extracts|categories|pageimages');
+            params.append('piprop', 'thumbnail'); params.append('pithumbsize', '600'); 
+            params.append('exchars', '450'); params.append('exintro', '1');
+            params.append('explaintext', '1'); params.append('cllimit', '30');
+            params.append('clshow', '!hidden');
+
+            try {
+                const res = await fetch(`${API_URL}?${params.toString()}`);
+                const data = await res.json();
+                if (!data.query || !data.query.pages) return [];
+                
+                return Object.values(data.query.pages).filter(page => 
+                    page.extract && page.extract.length > 100 &&
+                    !page.title.includes('List of') &&
+                    !page.extract.includes('may refer to:') &&
+                    !seenArticles.has(page.pageid) 
+                );
+            } catch (err) { return []; }
+        }
+
+        window.handleReadClick = function(url, categoriesStr) {
+            try { updateCategoryScores(JSON.parse(decodeURIComponent(categoriesStr)), 50); } catch(e) {}
+            window.open(url, '_blank');
+        };
+
+        function createReel(articleData) {
+            const { article, cleanCats, reason } = articleData;
+            markArticleSeen(article.pageid); 
+
+            const reel = document.createElement('div');
+            reel.className = 'reel';
+            reel.dataset.categories = JSON.stringify(cleanCats);
+            reel.dataset.reason = reason; 
+            const encodedCats = encodeURIComponent(JSON.stringify(cleanCats));
+
+            const extract = article.extract ? article.extract.trim() : '';
+            const url = `https://en.wikipedia.org/?curid=${article.pageid}`;
+            const imageHtml = article.thumbnail ? 
+                `<img src="${article.thumbnail.source}" alt="${article.title}" crossorigin="anonymous" class="article-img">` : '';
+
+            const hue = Math.floor(Math.random() * 360);
+            
+            reel.innerHTML = `
+                <div class="reel-bg" style="--reel-h: ${hue}; --reel-s: 40%;"></div>
+                <div class="reel-content">
+                    ${imageHtml}
+                    <h1 class="article-title title-font text-shadow">${article.title}</h1>
+                    <p class="article-extract text-shadow">${extract}</p>
+                    <button onclick="handleReadClick('${url}', '${encodedCats}')" class="read-btn">
+                        Read Full Article
+                    </button>
+                </div>
+            `;
+
+            if (article.thumbnail) {
+                extractColorFromImage(article.thumbnail.source, (hsl) => {
+                    const bg = reel.querySelector('.reel-bg');
+                    const finalSat = Math.min(hsl[1], 60);
+                    bg.style.setProperty('--reel-h', hsl[0]);
+                    bg.style.setProperty('--reel-s', finalSat + '%');
+                });
+            }
+
+            return reel;
+        }
+
+        async function loadNextReels(retries = 3) {
+            if (isLoading) return;
+            isLoading = true;
+            loadingOverlay.style.display = 'block';
+
+            try {
+                let articles = [];
+                const topCategory = getTopCategory();
+                const profile = getProfile();
+                
+                let baseReason = "Exploration: Broadening your horizons";
+                const rand = Math.random();
+
+                if (!isColdStart(profile) && topCategory && rand > 0.35) {
+                    const params = new URLSearchParams({ action: 'query', generator: 'categorymembers', gcmtitle: `Category:${topCategory}`, gcmnamespace: '0', gcmlimit: '25' });
+                    articles = await fetchWikiData(params);
+                    baseReason = `Exploring more about: <b>${topCategory}</b>`;
+                } else if (rand > 0.15) {
+                    const params = new URLSearchParams({ action: 'query', generator: 'categorymembers', gcmtitle: 'Category:Wikipedia_featured_articles', gcmnamespace: '0', gcmlimit: '25' });
+                    articles = await fetchWikiData(params);
+                    baseReason = "Fresh Content: Popular Featured Article";
+                }
+                
+                if (articles.length < 5) {
+                    const params = new URLSearchParams({ action: 'query', generator: 'random', grnnamespace: '0', grnlimit: '25' });
+                    const randomArticles = await fetchWikiData(params);
+                    articles = [...articles, ...randomArticles];
+                }
+
+                if (articles.length === 0) {
+                    isLoading = false;
+                    if (retries > 0) setTimeout(() => loadNextReels(retries - 1), 500);
+                    return; 
+                }
+
+                const scoredArticles = articles.map(a => scoreArticleByIntersection(a, profile, baseReason));
+                scoredArticles.sort((a, b) => b.score - a.score);
+
+                const finalBatch = scoredArticles.slice(0, 5);
+                finalBatch.forEach(articleData => {
+                    const reel = createReel(articleData);
+                    container.insertBefore(reel, trigger);
+                    dwellObserver.observe(reel);
+                });
+
+            } catch (err) {
+                console.error("Failed to load reels:", err);
+            } finally {
+                isLoading = false;
+                loadingOverlay.style.display = 'none';
+            }
+        }
+
+        scrollObserver = new IntersectionObserver((entries) => {
+            if (entries[0].isIntersecting && !isLoading) loadNextReels();
+        }, { root: container, rootMargin: '0px 0px 600px 0px' });
+
+        dwellObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    if (dwellInterval) clearInterval(dwellInterval);
+                    activeDwellTime = 0;
+                    
+                    suggestionReasonText.innerHTML = entry.target.dataset.reason || "Exploration";
+
+                    try { activeCategories = JSON.parse(entry.target.dataset.categories || "[]"); } 
+                    catch(e) { activeCategories = []; }
+
+                    dwellInterval = setInterval(() => {
+                        if (document.hidden) return; 
+
+                        activeDwellTime += 0.5;
+                        if (activeDwellTime >= 1) {
+                            const points = activeDwellTime > 15 ? 0.25 : 2.5;
+                            updateCategoryScores(activeCategories, points);
+                        }
+                    }, 500);
+                } else {
+                    if (activeDwellTime > 0 && activeDwellTime < 1.5) {
+                        try {
+                            const exitingCats = JSON.parse(entry.target.dataset.categories || "[]");
+                            updateCategoryScores(exitingCats, -5);
+                        } catch(e) {}
+                    }
+
+                    try {
+                        const exitingCats = JSON.parse(entry.target.dataset.categories || "[]");
+                        if (JSON.stringify(exitingCats) === JSON.stringify(activeCategories)) {
+                            clearInterval(dwellInterval);
+                            dwellInterval = null;
+                        }
+                    } catch(e) {}
+                }
+            });
+        }, { root: container, threshold: 0.6 });
+
+        window.addEventListener('DOMContentLoaded', () => {
+            loadSettings(); 
+            scrollObserver.observe(trigger);
+            loadNextReels();
+        });
+    </script>
+</body>
+</html>
